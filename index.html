@@ -1,0 +1,890 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Charlie's Coffee: sales, inventory and market demand</title>
+<link rel="icon" href="data:,">
+<style>
+:root {
+  color-scheme: light;
+  --page: #f9f9f7; --surface: #fcfcfb;
+  --ink: #0b0b0b; --ink2: #52514e; --muted: #898781;
+  --grid: #e1e0d9; --axis: #c3c2b7; --gray: #b4b3ab;
+  --border: rgba(11,11,11,0.10); --wash: rgba(11,11,11,0.045);
+  --good: #006300;
+  --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100; --s5: #e87ba4; --s6: #008300;
+  --st-good: #0ca30c; --st-warn: #fab219; --st-serious: #ec835a; --st-crit: #d03b3b;
+}
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) {
+    color-scheme: dark;
+    --page: #0d0d0d; --surface: #1a1a19;
+    --ink: #f0efec; --ink2: #c3c2b7; --muted: #898781;
+    --grid: #2c2c2a; --axis: #383835; --gray: #5a5955;
+    --border: rgba(255,255,255,0.10); --wash: rgba(255,255,255,0.06);
+    --good: #0ca30c;
+    --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181; --s6: #008300;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #0d0d0d; --surface: #1a1a19;
+  --ink: #f0efec; --ink2: #c3c2b7; --muted: #898781;
+  --grid: #2c2c2a; --axis: #383835; --gray: #5a5955;
+  --border: rgba(255,255,255,0.10); --wash: rgba(255,255,255,0.06);
+  --good: #0ca30c;
+  --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181; --s6: #008300;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; scroll-padding-top: 76px; }
+body {
+  margin: 0; background: var(--page); color: var(--ink);
+  font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+a { color: inherit; }
+button, select, input { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--s1); outline-offset: 2px; border-radius: 4px; }
+
+.top {
+  position: sticky; top: 0; z-index: 20; background: var(--page);
+  border-bottom: 1px solid var(--border);
+}
+.top-inner { max-width: 1180px; margin: 0 auto; padding: 12px 24px; display: flex; align-items: center; gap: 20px; flex-wrap: wrap; }
+.brand { font-weight: 650; font-size: 15px; letter-spacing: -0.01em; }
+.brand small { font-weight: 400; color: var(--ink2); margin-left: 8px; }
+.top nav { display: flex; gap: 4px; margin-left: auto; flex-wrap: wrap; }
+.top nav a { text-decoration: none; padding: 6px 10px; border-radius: 8px; color: var(--ink2); font-size: 13px; }
+.top nav a:hover { background: var(--wash); color: var(--ink); }
+.theme { border: 1px solid var(--border); background: var(--surface); border-radius: 8px; padding: 5px 10px; cursor: pointer; font-size: 12px; color: var(--ink2); }
+.theme:hover { background: var(--wash); }
+
+main { max-width: 1180px; margin: 0 auto; padding: 28px 24px 64px; }
+section { margin-top: 44px; }
+section:first-child { margin-top: 0; }
+h1 { font-size: 26px; line-height: 1.2; letter-spacing: -0.02em; margin: 0 0 6px; font-weight: 650; }
+h2 { font-size: 19px; letter-spacing: -0.01em; margin: 0 0 4px; font-weight: 650; }
+.lede { color: var(--ink2); margin: 0 0 18px; max-width: 72ch; }
+h3 { font-size: 14px; font-weight: 650; margin: 0; }
+.sub { color: var(--ink2); font-size: 12.5px; margin: 2px 0 0; }
+
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 18px 20px 16px; min-width: 0; }
+.card-head { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 10px; }
+.card-head > div { flex: 1; min-width: 0; }
+.tv { border: 1px solid var(--border); background: transparent; color: var(--ink2); border-radius: 8px; padding: 4px 9px; font-size: 12px; cursor: pointer; white-space: nowrap; }
+.tv:hover { background: var(--wash); color: var(--ink); }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(440px, 1fr)); gap: 16px; }
+.stack { display: grid; gap: 16px; }
+@media (max-width: 560px) { .top { position: static; } html { scroll-padding-top: 12px; } .grid2 { grid-template-columns: 1fr; } main { padding: 20px 14px 48px; } .top-inner { padding: 10px 14px; } }
+
+/* overview */
+.hero-row { display: grid; grid-template-columns: minmax(280px, 1.25fr) 2fr; gap: 16px; }
+@media (max-width: 860px) { .hero-row { grid-template-columns: 1fr; } }
+.hero-fig { font-size: 56px; line-height: 1.05; font-weight: 650; letter-spacing: -0.03em; margin: 8px 0 2px; }
+.hero-label { color: var(--ink2); font-size: 13px; }
+.delta { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; font-weight: 600; color: var(--good); }
+.delta.neg { color: var(--st-crit); }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; }
+.tile { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; }
+.tile .lbl { color: var(--ink2); font-size: 12.5px; }
+.tile .val { font-size: 28px; font-weight: 650; letter-spacing: -0.02em; margin: 2px 0; line-height: 1.15; }
+.tile .note { color: var(--ink2); font-size: 12px; }
+.finds { display: grid; grid-template-columns: repeat(auto-fit, minmax(330px, 1fr)); gap: 14px; margin-top: 16px; }
+.find { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 16px 18px; display: flex; flex-direction: column; gap: 8px; }
+.badge { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; font-weight: 650; letter-spacing: .04em; text-transform: uppercase; color: var(--ink2); }
+.badge svg { flex: none; }
+.find h3 { font-size: 15.5px; line-height: 1.3; }
+.find p { margin: 0; color: var(--ink2); font-size: 13.5px; }
+.find a.jump { margin-top: auto; font-size: 13px; font-weight: 600; text-decoration: none; color: var(--s1); }
+.find a.jump:hover { text-decoration: underline; }
+
+/* filters */
+.filters { display: flex; flex-wrap: wrap; gap: 14px 22px; align-items: center; margin: 0 0 14px; padding: 10px 14px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; }
+.filters label, .filters .flabel { font-size: 12px; color: var(--ink2); margin-right: 8px; }
+.chips { display: inline-flex; gap: 4px; flex-wrap: wrap; }
+.chip { border: 1px solid var(--border); background: transparent; border-radius: 8px; padding: 5px 10px 5px 8px; font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; gap: 5px; color: var(--ink); }
+.chip:hover { background: var(--wash); }
+.chip .ck { width: 16px; height: 16px; visibility: hidden; flex: none; }
+.chip[aria-pressed="true"] { border-color: var(--ink2); font-weight: 600; }
+.chip[aria-pressed="true"] .ck { visibility: visible; }
+select { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; font-size: 13px; }
+input[type=range] { width: 200px; accent-color: var(--s1); vertical-align: middle; }
+.sl { display: inline-flex; align-items: center; gap: 10px; }
+.sl output { font-weight: 650; min-width: 54px; }
+
+/* legends */
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 0 0 10px; font-size: 12.5px; color: var(--ink2); }
+.legend .it { display: inline-flex; align-items: center; gap: 7px; padding: 2px 0; cursor: default; }
+.legend .ln { width: 16px; height: 3px; border-radius: 2px; display: inline-block; }
+.legend .sw { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+.legend .dt { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+
+/* charts */
+.plot { width: 100%; position: relative; }
+.plot svg { display: block; width: 100%; overflow: visible; }
+.chart-note { color: var(--ink2); font-size: 12.5px; margin: 10px 0 0; }
+#tip {
+  position: fixed; z-index: 50; pointer-events: none; background: var(--surface); color: var(--ink);
+  border: 1px solid var(--border); border-radius: 10px; padding: 9px 11px; font-size: 12.5px;
+  box-shadow: 0 6px 24px rgba(0,0,0,0.14); max-width: 280px; min-width: 150px;
+}
+#tip .th { color: var(--ink2); font-size: 12px; margin-bottom: 5px; }
+#tip .tr { display: flex; align-items: center; gap: 8px; margin-top: 3px; }
+#tip .tk { width: 12px; height: 3px; border-radius: 2px; flex: none; }
+#tip .tn { color: var(--ink2); flex: 1; }
+#tip .tv2 { font-weight: 650; font-variant-numeric: tabular-nums; }
+#tip .tx { color: var(--ink2); margin-top: 5px; font-size: 12px; }
+
+table.dt { width: 100%; border-collapse: collapse; font-size: 13px; }
+table.dt caption { text-align: left; color: var(--ink2); font-size: 12.5px; padding-bottom: 6px; }
+table.dt th, table.dt td { padding: 7px 10px; border-bottom: 1px solid var(--grid); text-align: left; }
+table.dt th { color: var(--ink2); font-weight: 600; font-size: 12px; white-space: nowrap; }
+table.dt td.num, table.dt th.num { text-align: right; font-variant-numeric: tabular-nums; }
+.tscroll { overflow-x: auto; }
+
+/* inventory bits */
+.meter { height: 8px; border-radius: 4px; background: color-mix(in srgb, var(--st-crit) 18%, transparent); overflow: hidden; margin: 6px 0 4px; }
+.meter > span { display: block; height: 100%; border-radius: 4px; background: var(--st-crit); }
+.stat { display: inline-flex; align-items: center; gap: 6px; font-weight: 650; font-size: 12.5px; }
+.minibar { display: inline-block; height: 8px; border-radius: 4px; background: var(--s1); vertical-align: middle; margin-right: 8px; }
+.rowflag td:first-child { box-shadow: inset 3px 0 0 var(--st-crit); }
+.item-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(104px, 1fr)); gap: 10px; margin: 12px 0 0; }
+.item-tiles .val { font-size: 20px; }
+.item-tiles .tile { padding: 10px 12px; }
+.item-tiles .val { font-size: 22px; }
+.callout { margin: 12px 0 0; padding: 10px 14px; border-radius: 10px; background: var(--wash); font-size: 13.5px; }
+.callout strong { font-weight: 650; }
+footer { margin-top: 48px; color: var(--ink2); font-size: 12.5px; max-width: 90ch; }
+footer li { margin: 3px 0; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+</style>
+</head>
+<body>
+<div id="tip" hidden role="tooltip"></div>
+
+<header class="top">
+  <div class="top-inner">
+    <div class="brand">Charlie's Coffee<small>sales, inventory and market demand</small></div>
+    <nav aria-label="Sections">
+      <a href="#overview">Findings</a><a href="#sales">Sales</a><a href="#market">Market demand</a><a href="#inventory">Inventory</a><a href="#sites">Seventh store</a>
+    </nav>
+    <button class="theme" id="themeBtn" type="button" aria-label="Switch colour theme">Theme: auto</button>
+  </div>
+</header>
+
+<main>
+  <section id="overview">
+    <h1>Charlie's six San Francisco stores</h1>
+    <p class="lede">Net revenue, live stock and local coffee demand in one view, with the findings that matter most for the seventh-store decision. Data as of Oct 26, 2026. Workshop (synthetic) data.</p>
+
+    <div class="hero-row">
+      <div class="card">
+        <div class="hero-label">Net revenue, last 52 weeks, six stores</div>
+        <div class="hero-fig" id="heroFig">&nbsp;</div>
+        <div id="heroDelta"></div>
+        <div class="plot" id="heroSpark" style="margin-top:10px"></div>
+        <div class="sub">Each point is a 4-week period, Nov 2024 to Oct 2026.</div>
+      </div>
+      <div class="tiles" id="kpis"></div>
+    </div>
+
+    <div class="finds" id="finds"></div>
+  </section>
+
+  <section id="sales">
+    <h2>Sales</h2>
+    <p class="lede">Net revenue by store in 4-week periods. Filters below scope every figure and chart in this section.</p>
+    <div class="filters" role="group" aria-label="Sales filters">
+      <span><span class="flabel">Period</span><span class="chips" id="periodChips"></span></span>
+      <span><label for="storeSel">Store</label><select id="storeSel"></select></span>
+    </div>
+    <div class="tiles" id="salesTiles" style="margin-bottom:16px"></div>
+    <div class="grid2">
+      <div class="card" id="cardSales">
+        <div class="card-head"><div><h3 id="salesTitle">Net revenue per 4-week period</h3><p class="sub">Hover for every store at a date. Arrow keys work after tabbing into the chart.</p></div><button class="tv" type="button" aria-pressed="false">Table view</button></div>
+        <div class="chart-area"></div><div class="table-area tscroll" hidden></div>
+      </div>
+      <div class="card" id="cardRank">
+        <div class="card-head"><div><h3 id="rankTitle">Revenue by store</h3><p class="sub">Selected period. Colors match the lines.</p></div><button class="tv" type="button" aria-pressed="false">Table view</button></div>
+        <div class="chart-area"></div><div class="table-area tscroll" hidden></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="market">
+    <h2>Market demand</h2>
+    <p class="lede">How much of the local coffee spend each store captures, and where total demand is heading in the neighborhoods we could expand into.</p>
+    <div class="grid2">
+      <div class="card" id="cardCap">
+        <div class="card-head"><div><h3>Share of local coffee spend captured</h3><p class="sub">Store revenue divided by all-business coffee spend in the store's ZIP, last 52 weeks.</p></div><button class="tv" type="button" aria-pressed="false">Table view</button></div>
+        <div class="chart-area"></div><div class="table-area tscroll" hidden></div>
+        <p class="chart-note" id="capNote"></p>
+      </div>
+      <div class="card" id="cardDem">
+        <div class="card-head"><div><h3>Candidate ZIPs: demand now and next 6 months</h3><p class="sub">Whole-market coffee spend per 26 weeks. Forecast from BigQuery AI.FORECAST on 104 weeks of ZIP data.</p></div><button class="tv" type="button" aria-pressed="false">Table view</button></div>
+        <div class="chart-area"></div><div class="table-area tscroll" hidden></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="inventory">
+    <h2>Inventory</h2>
+    <p class="lede">Stock movements from the AlloyDB ledger (Aug 31 to Oct 26). Deliveries should track sales; where they stop, shortages follow.</p>
+    <div class="grid2">
+      <div class="card" id="cardFlow">
+        <div class="card-head"><div><h3>Units delivered vs units sold, all stores</h3><p class="sub">Weekly, 150 store-SKU pairs. Weeks start Monday.</p></div><button class="tv" type="button" aria-pressed="false">Table view</button></div>
+        <div class="chart-area"></div><div class="table-area tscroll" hidden></div>
+        <p class="chart-note" id="flowNote"></p>
+      </div>
+      <div class="card" id="cardItem">
+        <div class="card-head"><div><h3>The three shortages, week by week</h3><p class="sub">Pick an item. Sold and delivered units, weekly.</p></div><button class="tv" type="button" aria-pressed="false">Table view</button></div>
+        <div class="chips" id="itemChips" style="margin-bottom:10px"></div>
+        <div class="chart-area"></div><div class="table-area tscroll" hidden></div>
+        <div class="item-tiles" id="itemTiles"></div>
+      </div>
+    </div>
+    <div class="card" style="margin-top:16px" id="cardHealth">
+      <div class="card-head"><div><h3>Store stock health and customer complaints</h3><p class="sub">Stock position from the Oct 26 count. Complaints are availability complaints found by BigQuery AI.GENERATE in 20 reviews per store.</p></div></div>
+      <div class="tscroll" id="healthTable"></div>
+    </div>
+  </section>
+
+  <section id="sites">
+    <h2>Seventh store: candidate sites</h2>
+    <p class="lede">Estimated six-month revenue (forecast market spend times capture rate) minus six months of rent. Move the sliders to test how fragile the ranking is.</p>
+    <div class="filters" role="group" aria-label="Scenario controls">
+      <span class="sl"><label for="capRng">Capture rate</label><input id="capRng" type="range" min="0.16" max="0.26" step="0.0025" value="0.2075"><output id="capOut" for="capRng"></output></span>
+      <span class="sl"><label for="lossRng">SITE-006 revenue lost to construction</label><input id="lossRng" type="range" min="0" max="25" step="0.5" value="0"><output id="lossOut" for="lossRng"></output></span>
+      <span class="chips" id="presetChips"></span>
+    </div>
+    <div class="card" id="cardSites">
+      <div class="card-head"><div><h3>Net after rent, six months</h3><p class="sub">Revenue estimate minus rent. Rent includes building charges where the draft lease was read (SITE-001, 006, 008, 009, 010).</p></div><button class="tv" type="button" aria-pressed="false">Table view</button></div>
+      <div class="legend" id="siteLegend"></div>
+      <div class="chart-area"></div><div class="table-area tscroll" hidden></div>
+      <div class="callout" id="siteCallout"></div>
+    </div>
+  </section>
+
+  <footer>
+    <ul>
+      <li><strong>Sources.</strong> BigQuery <code>mcp_retail</code> (historical_sales, market_demand, customer_feedback, candidate_sites) and AlloyDB <code>mcp-retail-cluster</code> (inventory, stock_movements, products, stores). The page embeds small summary tables only, no raw rows.</li>
+      <li><strong>Model.</strong> Revenue estimate = forecast six-month ZIP coffee spend x capture rate (20.75% pooled across the six stores, range 16% to 26%). It ignores store size, ramp-up and cannibalization, so it is optimistic for a new store. Net after rent is not profit; no margin data exists.</li>
+      <li><strong>Leases.</strong> Rents for SITE-001, 006, 008, 009 and 010 come from the broker's draft leases and include building charges on net leases. The other seven leases were not read, so their rents are base rent only.</li>
+      <li><strong>Construction.</strong> The 18-month construction outside SITE-006 and the 25% foot-traffic drop were supplied by the user and are not verified. How much of the drop reaches revenue is unknown, hence the slider.</li>
+      <li><strong>Forecasts</strong> vary by about 0.03% to 0.2% between runs of AI.FORECAST. Reviews are synthetic.</li>
+    </ul>
+  </footer>
+</main>
+
+<script>
+'use strict';
+/* ---------- summary data (aggregates only) ---------- */
+const STORES = [
+  {id:'STR-001', name:'SoMa',           zip:'94103', c:'var(--s1)'},
+  {id:'STR-002', name:'Mission District',zip:'94110', c:'var(--s2)'},
+  {id:'STR-003', name:'North Beach',    zip:'94133', c:'var(--s3)'},
+  {id:'STR-004', name:'Hayes Valley',   zip:'94102', c:'var(--s4)'},
+  {id:'STR-005', name:'Inner Richmond', zip:'94118', c:'var(--s5)'},
+  {id:'STR-006', name:'Marina',         zip:'94123', c:'var(--s6)'}
+];
+// 26 four-week periods: [first Monday, net revenue per store STR-001..006]
+const SALES = [
+["2024-11-04",97395,119784,91670,76910,103850,88065],["2024-12-02",99639,117862,95785,75966,103168,88574],
+["2024-12-30",98375,119447,94943,77709,106533,86921],["2025-01-27",99031,120931,95528,75939,103131,86802],
+["2025-02-24",99195,121698,94531,76238,103918,87793],["2025-03-24",98676,122710,93943,77990,106036,87724],
+["2025-04-21",98932,125351,95026,78714,103868,88844],["2025-05-19",101275,124458,95554,79007,105560,90449],
+["2025-06-16",101371,124658,94799,82466,105183,89762],["2025-07-14",100989,128602,99199,81954,107691,90250],
+["2025-08-11",104401,131064,96962,82854,106593,91516],["2025-09-08",102936,130400,97306,83092,108896,91683],
+["2025-10-06",102151,126795,96986,83929,109153,90112],["2025-11-03",103625,129575,97286,85082,111626,89322],
+["2025-12-01",103950,130110,99734,83056,110612,88839],["2025-12-29",104210,133910,96841,84391,110270,91534],
+["2026-01-26",105341,135564,96478,85054,111366,90756],["2026-02-23",103458,132452,97483,85431,111630,90670],
+["2026-03-23",102675,131271,99243,85264,108780,90754],["2026-04-20",105429,134412,100347,87507,108653,90796],
+["2026-05-18",106754,135647,99513,88610,110461,89736],["2026-06-15",107395,135782,100439,88238,109772,90545],
+["2026-07-13",108128,138481,99034,89495,114036,89783],["2026-08-10",107971,138732,100727,89653,112569,93470],
+["2026-09-07",106700,139820,101359,93354,114013,92716],["2026-10-05",108400,140110,101792,91713,112585,94332]
+];
+// last 52 weeks revenue vs all-business coffee spend in the store's ZIP
+const CAP = [
+  {id:'STR-001', rev:1374037, mkt:5725155}, {id:'STR-002', rev:1755865, mkt:8361264},
+  {id:'STR-003', rev:1290276, mkt:4962600}, {id:'STR-004', rev:1136847, mkt:5983407},
+  {id:'STR-005', rev:1446373, mkt:9039830}, {id:'STR-006', rev:1183253, mkt:5378422}
+];
+// candidate ZIPs: actual coffee spend last 26 weeks, AI.FORECAST next 26 weeks
+const DEM = [
+  {zip:'94124', name:'Bayview',                    a:3753606, f:4011822, sites:'SITE-009'},
+  {zip:'94117', name:'Haight / Cole Valley',       a:4802092, f:5005006, sites:'SITE-006'},
+  {zip:'94122', name:'Sunset',                     a:4042034, f:4139735, sites:'SITE-008'},
+  {zip:'94107', name:'Potrero Hill / Dogpatch',    a:4802631, f:4839003, sites:'SITE-001, 010'},
+  {zip:'94114', name:'Castro / Noe Valley',        a:3562974, f:3576263, sites:'SITE-003, 012'},
+  {zip:'94116', name:'Parkside',                   a:3249343, f:3252066, sites:'SITE-005'},
+  {zip:'94115', name:'Pacific Heights / Fillmore', a:3538289, f:3518182, sites:'SITE-004'},
+  {zip:'94121', name:'Outer Richmond',             a:3824400, f:3768482, sites:'SITE-007'},
+  {zip:'94109', name:'Nob Hill / Polk Gulch',      a:3368120, f:3293397, sites:'SITE-002, 011'}
+];
+// chain-wide weekly units, AlloyDB stock_movements (complete weeks)
+const FLOW = {
+  weeks:['Aug 31','Sep 7','Sep 14','Sep 21','Sep 28','Oct 5','Oct 12','Oct 19'],
+  inn:[26586,26460,26475,26216,26271,27702,25754,18713],
+  sold:[26516,26357,26314,25862,26527,26171,26681,26237]
+};
+const ITEMS = [
+  {key:'matcha', name:'Ceremonial Matcha Latte', store:'North Beach', stock:0, reorder:25, lastDel:'Oct 6', complaints:7,
+   sold:[169,203,229,209,163,215,206,156], del:[181,200,229,204,168,501,0,0]},
+  {key:'lav', name:'Oat Milk Lavender Latte', store:'Mission District', stock:8, reorder:45, lastDel:'Oct 8', complaints:8,
+   sold:[348,381,342,439,464,403,396,464], del:[357,366,377,460,444,1043,0,0]},
+  {key:'geisha', name:'Guatemala Geisha beans (8oz)', store:'SoMa', stock:2, reorder:8, lastDel:'Oct 8', complaints:7,
+   sold:[14,14,20,16,19,19,14,14], del:[13,17,17,19,16,27,0,0]}
+];
+const HEALTH = [
+  {id:'STR-002', zero:0, low:1, gap:1, comp:10}, {id:'STR-003', zero:1, low:1, gap:1, comp:8},
+  {id:'STR-001', zero:0, low:1, gap:1, comp:7},  {id:'STR-006', zero:0, low:0, gap:0, comp:3},
+  {id:'STR-004', zero:0, low:0, gap:0, comp:2},  {id:'STR-005', zero:0, low:0, gap:0, comp:2}
+];
+// candidate sites: monthly base rent, building charge (net leases), 6-month forecast market spend
+const SITES = [
+  {id:'SITE-001', area:'Potrero Hill / Dogpatch', sqft:1630, lease:36,  base:9552.51,  bld:0,       type:'Modified gross', read:true,  fc:4839003},
+  {id:'SITE-002', area:'Nob Hill / Polk Gulch',   sqft:1940, lease:60,  base:9509.15,  bld:0,       type:'not read',       read:false, fc:3293397},
+  {id:'SITE-003', area:'Castro / Noe Valley',     sqft:1100, lease:84,  base:7853.44,  bld:0,       type:'not read',       read:false, fc:3576263},
+  {id:'SITE-004', area:'Pacific Heights / Fillmore', sqft:970, lease:84, base:7511.32,  bld:0,       type:'not read',       read:false, fc:3518182},
+  {id:'SITE-005', area:'Parkside',                sqft:2010, lease:84,  base:12923.37, bld:0,       type:'not read',       read:false, fc:3252066},
+  {id:'SITE-006', area:'Haight / Cole Valley',    sqft:1060, lease:120, base:7074.93,  bld:1325,    type:'Net',            read:true,  fc:5005006},
+  {id:'SITE-007', area:'Outer Richmond',          sqft:1990, lease:84,  base:13455.79, bld:0,       type:'not read',       read:false, fc:3768482},
+  {id:'SITE-008', area:'Sunset',                  sqft:1460, lease:120, base:7932.55,  bld:0,       type:'Modified gross', read:true,  fc:4139735},
+  {id:'SITE-009', area:'Bayview',                 sqft:1650, lease:36,  base:8075.98,  bld:1320,    type:'Net',            read:true,  fc:4011822},
+  {id:'SITE-010', area:'Potrero Hill / Dogpatch (large)', sqft:2550, lease:84, base:20776.24, bld:3442.5, type:'Net',     read:true,  fc:4839003},
+  {id:'SITE-011', area:'Nob Hill / Polk Gulch (large)', sqft:2590, lease:60, base:11484.67, bld:0,     type:'not read',       read:false, fc:3293397},
+  {id:'SITE-012', area:'Castro / Noe Valley (large)',  sqft:1780, lease:120, base:15279.59, bld:0,     type:'not read',       read:false, fc:3576263}
+];
+
+/* ---------- helpers ---------- */
+const NS = 'http://www.w3.org/2000/svg';
+const $ = (s, r = document) => r.querySelector(s);
+function S(tag, attrs, parent) {
+  const e = document.createElementNS(NS, tag);
+  for (const k in attrs || {}) { if (k === 'text') e.textContent = attrs[k]; else e.setAttribute(k, attrs[k]); }
+  if (parent) parent.appendChild(e);
+  return e;
+}
+function H(tag, attrs, kids) {
+  const e = document.createElement(tag);
+  for (const k in attrs || {}) {
+    if (k === 'text') e.textContent = attrs[k];
+    else if (k === 'class') e.className = attrs[k];
+    else e.setAttribute(k, attrs[k]);
+  }
+  (kids || []).forEach(c => e.appendChild(typeof c === 'string' ? document.createTextNode(c) : c));
+  return e;
+}
+const money = (n, d = 2) => Math.abs(n) >= 1e6 ? '$' + (n / 1e6).toFixed(d) + 'M' : Math.abs(n) >= 1e3 ? '$' + Math.round(n / 1e3) + 'K' : '$' + Math.round(n);
+const moneyFull = n => '$' + Math.round(n).toLocaleString('en-US');
+const int = n => Math.round(n).toLocaleString('en-US');
+const pct = (n, d = 0) => (n >= 0 ? '+' : '') + (n * 100).toFixed(d) + '%';
+const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const dFmt = iso => { const [y, m, d] = iso.split('-').map(Number); return MON[m - 1] + ' ' + d + ', ' + y; };
+const dShort = iso => { const [y, m] = iso.split('-').map(Number); return MON[m - 1] + " '" + String(y).slice(2); };
+const sum = a => a.reduce((x, y) => x + y, 0);
+
+function nice(min, max, n = 5) {
+  const span = (max - min) || 1, raw = span / (n - 1), mag = Math.pow(10, Math.floor(Math.log10(raw))), nm = raw / mag;
+  const step = (nm <= 1 ? 1 : nm <= 2 ? 2 : nm <= 2.5 ? 2.5 : nm <= 5 ? 5 : 10) * mag;
+  const lo = Math.floor(min / step + 1e-9) * step, hi = Math.ceil(max / step - 1e-9) * step, ticks = [];
+  for (let v = lo; v <= hi + step / 2; v += step) ticks.push(+v.toFixed(8));
+  return {lo, hi, ticks};
+}
+
+/* ---------- tooltip ---------- */
+const tip = $('#tip');
+function tipShow(title, rows, extra) {
+  tip.replaceChildren();
+  if (title) tip.appendChild(H('div', {class: 'th', text: title}));
+  rows.forEach(r => {
+    const row = H('div', {class: 'tr'});
+    if (r.color) { const k = H('span', {class: 'tk'}); k.style.background = r.color; row.appendChild(k); }
+    row.appendChild(H('span', {class: 'tn', text: r.name}));
+    row.appendChild(H('span', {class: 'tv2', text: r.value}));
+    tip.appendChild(row);
+  });
+  if (extra) tip.appendChild(H('div', {class: 'tx', text: extra}));
+  tip.hidden = false;
+}
+function tipPlace(cx, cy) {
+  const r = tip.getBoundingClientRect();
+  let x = cx + 14, y = cy + 14;
+  if (x + r.width > innerWidth - 8) x = cx - r.width - 14;
+  if (y + r.height > innerHeight - 8) y = cy - r.height - 14;
+  tip.style.left = Math.max(8, x) + 'px'; tip.style.top = Math.max(8, y) + 'px';
+}
+const tipHide = () => { tip.hidden = true; };
+function tipAtEl(el) { const b = el.getBoundingClientRect(); tipPlace(b.left + b.width / 2, b.top + b.height / 2); }
+
+/* ---------- legend ---------- */
+function legend(root, items, onHover) {
+  const lg = H('div', {class: 'legend'});
+  items.forEach(it => {
+    const e = H('span', {class: 'it'});
+    const k = H('span', {class: it.shape || 'ln'}); k.style.background = it.color; e.appendChild(k);
+    e.appendChild(H('span', {text: it.name}));
+    if (onHover) { e.addEventListener('pointerenter', () => onHover(it.id)); e.addEventListener('pointerleave', () => onHover(null)); }
+    lg.appendChild(e);
+  });
+  root.appendChild(lg);
+}
+
+/* ---------- line chart ---------- */
+function lineChart(root, cfg) {
+  const W = Math.max(root.clientWidth, 320), Ht = cfg.height || 300;
+  const m = {l: 56, r: cfg.endLabels ? 92 : 22, t: 16, b: 30};
+  const pw = W - m.l - m.r, ph = Ht - m.t - m.b, n = cfg.xLabels.length, ser = cfg.series;
+  let mn = Infinity, mx = -Infinity;
+  ser.forEach(s => s.values.forEach(v => { mn = Math.min(mn, v); mx = Math.max(mx, v); }));
+  const sc = cfg.yZero ? nice(0, mx * 1.04) : nice(mn - (mx - mn) * 0.18, mx + (mx - mn) * 0.06);
+  const X = i => m.l + (n === 1 ? pw / 2 : i * pw / (n - 1));
+  const Y = v => m.t + ph * (1 - (v - sc.lo) / (sc.hi - sc.lo));
+  const svg = S('svg', {viewBox: `0 0 ${W} ${Ht}`, role: 'img', 'aria-label': cfg.aria || 'Line chart. A table view is available.'}, root);
+  sc.ticks.forEach(t => {
+    S('line', {x1: m.l, x2: W - m.r, y1: Y(t), y2: Y(t), style: 'stroke:var(--grid);stroke-width:1'}, svg);
+    S('text', {x: m.l - 8, y: Y(t) + 4, 'text-anchor': 'end', style: 'fill:var(--muted);font-size:11px', text: cfg.fmtAxis(t)}, svg);
+  });
+  if (sc.lo === 0) S('line', {x1: m.l, x2: W - m.r, y1: Y(0), y2: Y(0), style: 'stroke:var(--axis);stroke-width:1'}, svg);
+  (cfg.xTicks || []).forEach(i => S('text', {x: X(i), y: Ht - 8, 'text-anchor': 'middle', style: 'fill:var(--muted);font-size:11px', text: cfg.xTickLabels[i]}, svg));
+  const lines = {};
+  ser.forEach(s => {
+    const d = s.values.map((v, i) => (i ? 'L' : 'M') + X(i).toFixed(1) + ' ' + Y(v).toFixed(1)).join('');
+    if (ser.length === 1) S('path', {d: d + `L${X(n - 1)} ${Y(sc.lo)}L${X(0)} ${Y(sc.lo)}Z`, style: `fill:${s.color};opacity:.10`}, svg);
+    lines[s.id] = S('path', {d, fill: 'none', 'stroke-linejoin': 'round', 'stroke-linecap': 'round', style: `stroke:${s.color};stroke-width:2`}, svg);
+  });
+  const ends = [];
+  ser.forEach(s => {
+    const i = n - 1, v = s.values[i];
+    S('circle', {cx: X(i), cy: Y(v), r: 4, style: `fill:${s.color};stroke:var(--surface);stroke-width:2`}, svg);
+    ends.push({s, y: Y(v)});
+  });
+  if (cfg.endLabels && ser.length <= 4) ends.forEach(e => S('text', {x: X(n - 1) + 10, y: e.y + 4, style: 'fill:var(--ink2);font-size:12px', text: e.s.name}, svg));
+  (cfg.annotations || []).forEach(a => {
+    const s = ser[a.si], px = X(a.i), py = Y(s.values[a.i]), ty = py + (a.dy || 34);
+    S('line', {x1: px, y1: py + 6, x2: px, y2: ty - 12, style: 'stroke:var(--muted);stroke-width:1'}, svg);
+    S('text', {x: Math.min(px, W - m.r - 4), y: ty, 'text-anchor': 'end', style: 'fill:var(--ink);font-size:12px;font-weight:600;paint-order:stroke;stroke:var(--surface);stroke-width:4px', text: a.text}, svg);
+  });
+  const cross = S('line', {y1: m.t, y2: m.t + ph, style: 'stroke:var(--axis);stroke-width:1;display:none'}, svg);
+  const dots = ser.map(s => S('circle', {r: 4.5, style: `fill:${s.color};stroke:var(--surface);stroke-width:2;display:none`}, svg));
+  const ov = S('rect', {x: m.l - 10, y: m.t, width: pw + 20, height: ph, fill: 'transparent', tabindex: 0, role: 'application', 'aria-label': 'Chart data points. Use left and right arrow keys to read each point.'}, svg);
+  let cur = n - 1;
+  function at(i, cx, cy) {
+    cur = Math.max(0, Math.min(n - 1, i));
+    cross.style.display = ''; cross.setAttribute('x1', X(cur)); cross.setAttribute('x2', X(cur));
+    dots.forEach((d, k) => { d.style.display = ''; d.setAttribute('cx', X(cur)); d.setAttribute('cy', Y(ser[k].values[cur])); });
+    const rows = ser.map(s => ({color: s.color, name: s.name, v: s.values[cur]})).sort((a, b) => b.v - a.v).map(r => ({color: r.color, name: r.name, value: cfg.fmtTip(r.v)}));
+    tipShow(cfg.xTip[cur], rows);
+    if (cx != null) tipPlace(cx, cy); else { const b = ov.getBoundingClientRect(); tipPlace(b.left + (X(cur) / W) * b.width, b.top + 20); }
+  }
+  const idxFrom = e => { const b = ov.getBoundingClientRect(); return Math.round(((e.clientX - b.left) / b.width * (pw + 20) - 10) / pw * (n - 1)); };
+  ov.addEventListener('pointermove', e => at(idxFrom(e), e.clientX, e.clientY));
+  ov.addEventListener('pointerleave', () => { cross.style.display = 'none'; dots.forEach(d => d.style.display = 'none'); tipHide(); });
+  ov.addEventListener('keydown', e => { if (e.key === 'ArrowLeft') { e.preventDefault(); at(cur - 1); } else if (e.key === 'ArrowRight') { e.preventDefault(); at(cur + 1); } });
+  ov.addEventListener('focus', () => at(cur));
+  ov.addEventListener('blur', () => { cross.style.display = 'none'; dots.forEach(d => d.style.display = 'none'); tipHide(); });
+  return {
+    highlight(id) { ser.forEach(s => { lines[s.id].style.opacity = !id || id === s.id ? 1 : 0.2; }); }
+  };
+}
+
+/* ---------- sparkline ---------- */
+function sparkline(root, values, color) {
+  const W = Math.max(root.clientWidth, 200), Ht = 64, m = 6;
+  const mn = Math.min(...values), mx = Math.max(...values);
+  const X = i => m + i * (W - 2 * m) / (values.length - 1), Y = v => m + (Ht - 2 * m) * (1 - (v - mn) / ((mx - mn) || 1));
+  const svg = S('svg', {viewBox: `0 0 ${W} ${Ht}`, role: 'img', 'aria-label': 'Trend of net revenue per 4-week period'}, root);
+  const d = values.map((v, i) => (i ? 'L' : 'M') + X(i).toFixed(1) + ' ' + Y(v).toFixed(1)).join('');
+  S('path', {d: d + `L${X(values.length - 1)} ${Ht}L${X(0)} ${Ht}Z`, style: `fill:${color};opacity:.10`}, svg);
+  S('path', {d, fill: 'none', 'stroke-linecap': 'round', 'stroke-linejoin': 'round', style: `stroke:${color};stroke-width:2`}, svg);
+  S('circle', {cx: X(values.length - 1), cy: Y(values[values.length - 1]), r: 4, style: `fill:${color};stroke:var(--surface);stroke-width:2`}, svg);
+}
+
+/* ---------- horizontal bars ---------- */
+function hbar(root, cfg) {
+  const W = Math.max(root.clientWidth, 320), rowH = cfg.rowH || 36, barH = cfg.barH || 18;
+  const narrow = W < 520;
+  const m = {l: cfg.labelW ? (narrow ? Math.min(cfg.labelW, 140) : cfg.labelW) : (narrow ? 110 : 150), r: cfg.rightW || 72, t: 4, b: cfg.tickFmt ? 24 : 6};
+  const rows = cfg.rows, Ht = m.t + m.b + rows.length * rowH;
+  const sc = nice(0, cfg.max != null ? cfg.max : Math.max(...rows.map(r => r.value)), 5);
+  const pw = W - m.l - m.r, X = v => m.l + pw * (v / sc.hi);
+  const svg = S('svg', {viewBox: `0 0 ${W} ${Ht}`, role: 'img', 'aria-label': cfg.aria || 'Bar chart. A table view is available.'}, root);
+  if (cfg.tickFmt) sc.ticks.forEach(t => {
+    S('line', {x1: X(t), x2: X(t), y1: m.t, y2: Ht - m.b, style: 'stroke:var(--grid);stroke-width:1'}, svg);
+    S('text', {x: X(t), y: Ht - 7, 'text-anchor': 'middle', style: 'fill:var(--muted);font-size:11px', text: cfg.tickFmt(t)}, svg);
+  });
+  S('line', {x1: m.l, x2: m.l, y1: m.t, y2: Ht - m.b, style: 'stroke:var(--axis);stroke-width:1'}, svg);
+  rows.forEach((r, i) => {
+    const y0 = m.t + i * rowH, cy = y0 + rowH / 2, g = S('g', {}, svg);
+    const wash = S('rect', {x: 0, y: y0, width: W, height: rowH, rx: 6, style: 'fill:var(--wash);display:none'}, g);
+    const sub = r.sub ? 1 : 0;
+    S('text', {x: m.l - 10, y: cy + (sub ? -1 : 4), 'text-anchor': 'end', style: 'fill:var(--ink);font-size:12.5px', text: r.label}, g);
+    if (sub) S('text', {x: m.l - 10, y: cy + 13, 'text-anchor': 'end', style: 'fill:var(--muted);font-size:11px', text: r.sub}, g);
+    const w = Math.max(0, X(r.value) - m.l), by = cy - barH / 2, rr = Math.min(4, w, barH / 2);
+    const d = w <= 0 ? '' : `M${m.l} ${by}h${w - rr}a${rr} ${rr} 0 0 1 ${rr} ${rr}v${barH - 2 * rr}a${rr} ${rr} 0 0 1 ${-rr} ${rr}h${-(w - rr)}z`;
+    const bar = S('path', {d, style: `fill:${r.color}`}, g);
+    S('text', {x: m.l + w + 8, y: cy + 4, style: 'fill:var(--ink);font-size:12.5px;font-weight:650', text: r.valueLabel}, g);
+    const hit = S('rect', {x: 0, y: y0, width: W, height: rowH, fill: 'transparent', tabindex: 0, role: 'img', 'aria-label': r.label + ': ' + r.valueLabel}, g);
+    const on = (cx, cy2) => { wash.style.display = ''; bar.style.opacity = .85; tipShow(r.label, [{color: r.color, name: cfg.valName || 'Value', value: r.valueLabel}].concat(r.tip || [])); if (cx != null) tipPlace(cx, cy2); else tipAtEl(hit); };
+    const off = () => { wash.style.display = 'none'; bar.style.opacity = 1; tipHide(); };
+    hit.addEventListener('pointermove', e => on(e.clientX, e.clientY));
+    hit.addEventListener('pointerleave', off); hit.addEventListener('focus', () => on()); hit.addEventListener('blur', off);
+  });
+}
+
+/* ---------- dumbbell ---------- */
+function dumbbell(root, cfg) {
+  const W = Math.max(root.clientWidth, 340), rowH = 38, narrow = W < 520;
+  const m = {l: narrow ? 120 : 170, r: 64, t: 4, b: 26};
+  const rows = cfg.rows, Ht = m.t + m.b + rows.length * rowH;
+  const all = rows.flatMap(r => [r.a, r.b]), sc = nice(Math.min(...all) * 0.96, Math.max(...all) * 1.02, 5);
+  const pw = W - m.l - m.r, X = v => m.l + pw * (v - sc.lo) / (sc.hi - sc.lo);
+  const svg = S('svg', {viewBox: `0 0 ${W} ${Ht}`, role: 'img', 'aria-label': cfg.aria}, root);
+  sc.ticks.forEach(t => {
+    S('line', {x1: X(t), x2: X(t), y1: m.t, y2: Ht - m.b, style: 'stroke:var(--grid);stroke-width:1'}, svg);
+    S('text', {x: X(t), y: Ht - 7, 'text-anchor': 'middle', style: 'fill:var(--muted);font-size:11px', text: '$' + (t / 1e6).toFixed(1) + 'M'}, svg);
+  });
+  rows.forEach((r, i) => {
+    const y0 = m.t + i * rowH, cy = y0 + rowH / 2, g = S('g', {}, svg);
+    const wash = S('rect', {x: 0, y: y0, width: W, height: rowH, rx: 6, style: 'fill:var(--wash);display:none'}, g);
+    S('text', {x: m.l - 10, y: cy - 1, 'text-anchor': 'end', style: 'fill:var(--ink);font-size:12.5px', text: r.label}, g);
+    S('text', {x: m.l - 10, y: cy + 13, 'text-anchor': 'end', style: 'fill:var(--muted);font-size:11px', text: r.sub}, g);
+    S('line', {x1: X(r.a), x2: X(r.b), y1: cy, y2: cy, style: 'stroke:var(--gray);stroke-width:2;stroke-linecap:round'}, g);
+    S('circle', {cx: X(r.a), cy, r: 4.5, style: 'fill:var(--gray);stroke:var(--surface);stroke-width:2'}, g);
+    S('circle', {cx: X(r.b), cy, r: 4.5, style: 'fill:var(--s1);stroke:var(--surface);stroke-width:2'}, g);
+    S('text', {x: W - m.r + 12, y: cy + 4, style: 'fill:var(--ink);font-size:12.5px;font-weight:650', text: pct(r.b / r.a - 1, 1)}, g);
+    const hit = S('rect', {x: 0, y: y0, width: W, height: rowH, fill: 'transparent', tabindex: 0, role: 'img', 'aria-label': r.label + ' ' + pct(r.b / r.a - 1, 1)}, g);
+    const on = (cx, cy2) => { wash.style.display = ''; tipShow(r.label + ' (' + r.zip + ')', [
+      {color: 'var(--gray)', name: 'Last 26 weeks', value: money(r.a)}, {color: 'var(--s1)', name: 'Next 26 weeks (forecast)', value: money(r.b)}, {name: 'Change', value: pct(r.b / r.a - 1, 1)}], r.sub);
+      if (cx != null) tipPlace(cx, cy2); else tipAtEl(hit); };
+    const off = () => { wash.style.display = 'none'; tipHide(); };
+    hit.addEventListener('pointermove', e => on(e.clientX, e.clientY));
+    hit.addEventListener('pointerleave', off); hit.addEventListener('focus', () => on()); hit.addEventListener('blur', off);
+  });
+}
+
+/* ---------- grouped columns ---------- */
+function groupedCols(root, cfg) {
+  const W = Math.max(root.clientWidth, 320), Ht = cfg.height || 270;
+  const m = {l: 50, r: 12, t: 14, b: 30}, pw = W - m.l - m.r, ph = Ht - m.t - m.b, n = cfg.xLabels.length, ser = cfg.series;
+  const mx = Math.max(...ser.flatMap(s => s.values)), sc = nice(0, mx * 1.05, 5);
+  const band = pw / n, bw = Math.min(20, band / 2 - 4);
+  const Y = v => m.t + ph * (1 - v / sc.hi);
+  const svg = S('svg', {viewBox: `0 0 ${W} ${Ht}`, role: 'img', 'aria-label': cfg.aria}, root);
+  sc.ticks.forEach(t => {
+    S('line', {x1: m.l, x2: W - m.r, y1: Y(t), y2: Y(t), style: 'stroke:var(--grid);stroke-width:1'}, svg);
+    S('text', {x: m.l - 8, y: Y(t) + 4, 'text-anchor': 'end', style: 'fill:var(--muted);font-size:11px', text: int(t)}, svg);
+  });
+  S('line', {x1: m.l, x2: W - m.r, y1: Y(0), y2: Y(0), style: 'stroke:var(--axis);stroke-width:1'}, svg);
+  cfg.xLabels.forEach((lb, i) => {
+    const cx = m.l + band * (i + 0.5), g = S('g', {}, svg);
+    const wash = S('rect', {x: m.l + band * i, y: m.t, width: band, height: ph, rx: 6, style: 'fill:var(--wash);display:none'}, g);
+    S('text', {x: cx, y: Ht - 9, 'text-anchor': 'middle', style: 'fill:var(--muted);font-size:11px', text: lb}, g);
+    ser.forEach((s, k) => {
+      const v = s.values[i], x = cx + (k === 0 ? -bw - 1 : 1), h = ph * v / sc.hi, rr = Math.min(4, bw / 2, h);
+      if (h > 0) S('path', {d: `M${x} ${Y(0)}v${-(h - rr)}a${rr} ${rr} 0 0 1 ${rr} ${-rr}h${bw - 2 * rr}a${rr} ${rr} 0 0 1 ${rr} ${rr}v${h - rr}z`, style: `fill:${s.color}`}, g);
+      else if (cfg.zeroLabel === k) S('text', {x: x + bw / 2, y: Y(0) - 6, 'text-anchor': 'middle', style: 'fill:var(--ink2);font-size:11px;font-weight:600', text: 'none'}, g);
+    });
+    const hit = S('rect', {x: m.l + band * i, y: m.t, width: band, height: ph + 20, fill: 'transparent', tabindex: 0, role: 'img', 'aria-label': 'Week of ' + lb + ': ' + ser.map(s => s.name + ' ' + int(s.values[i])).join(', ')}, g);
+    const on = (cx2, cy2) => { wash.style.display = ''; tipShow('Week of ' + lb, ser.map(s => ({color: s.color, name: s.name, value: int(s.values[i])}))); if (cx2 != null) tipPlace(cx2, cy2); else tipAtEl(hit); };
+    const off = () => { wash.style.display = 'none'; tipHide(); };
+    hit.addEventListener('pointermove', e => on(e.clientX, e.clientY));
+    hit.addEventListener('pointerleave', off); hit.addEventListener('focus', () => on()); hit.addEventListener('blur', off);
+  });
+}
+
+/* ---------- table view + card wiring ---------- */
+function buildTable(root, t) {
+  root.replaceChildren();
+  const tb = H('table', {class: 'dt'});
+  if (t.caption) tb.appendChild(H('caption', {text: t.caption}));
+  const thead = H('thead'), tr = H('tr');
+  t.headers.forEach((h, i) => tr.appendChild(H('th', {class: i > 0 && t.num !== false ? 'num' : '', scope: 'col', text: h})));
+  thead.appendChild(tr); tb.appendChild(thead);
+  const tbody = H('tbody');
+  t.rows.forEach(r => { const row = H('tr'); r.forEach((c, i) => row.appendChild(H('td', {class: i > 0 && t.num !== false ? 'num' : '', text: String(c)}))); tbody.appendChild(row); });
+  tb.appendChild(tbody); root.appendChild(tb);
+}
+const draws = [];
+function card(el, cfg) {
+  const btn = $('.tv', el), chart = $('.chart-area', el), tbl = $('.table-area', el);
+  let mode = 'chart';
+  function draw() {
+    if (mode === 'chart') { chart.hidden = false; tbl.hidden = true; chart.replaceChildren(); cfg.chart(chart); }
+    else { chart.hidden = true; tbl.hidden = false; buildTable(tbl, cfg.table()); }
+  }
+  btn.addEventListener('click', () => { mode = mode === 'chart' ? 'table' : 'chart'; btn.setAttribute('aria-pressed', mode === 'table'); btn.textContent = mode === 'table' ? 'Chart view' : 'Table view'; tipHide(); draw(); });
+  draws.push(draw);
+  return draw;
+}
+const plotDiv = chart => { const d = H('div', {class: 'plot'}); chart.appendChild(d); return d; };
+
+/* ---------- derived numbers ---------- */
+const tot = k => SALES.map(r => r[k]);
+const chainByPeriod = SALES.map(r => sum(r.slice(1)));
+const last52 = sum(chainByPeriod.slice(13)), prior52 = sum(chainByPeriod.slice(0, 13));
+const pooled = sum(CAP.map(c => c.rev)) / sum(CAP.map(c => c.mkt));
+const growth = STORES.map((s, i) => ({s, g: SALES[25][i + 1] / SALES[0][i + 1] - 1})).sort((a, b) => b.g - a.g);
+const inflowDrop = FLOW.inn[7] / FLOW.inn[6] - 1, inflowVsSales = FLOW.inn[7] / FLOW.sold[7] - 1;
+const complaintsTotal = sum(HEALTH.map(h => h.comp));
+const capRows = CAP.map(c => ({...c, store: STORES.find(s => s.id === c.id), cap: c.rev / c.mkt})).sort((a, b) => b.cap - a.cap);
+
+/* ---------- overview ---------- */
+const ICON = {
+  crit: '<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.5l6.5 12h-13z" fill="var(--st-crit)"/><rect x="7.2" y="6" width="1.6" height="4" fill="#fff"/><rect x="7.2" y="11" width="1.6" height="1.6" fill="#fff"/></svg>',
+  warn: '<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.5l6.5 12h-13z" fill="var(--st-warn)"/><rect x="7.2" y="6" width="1.6" height="4" fill="#0b0b0b"/><rect x="7.2" y="11" width="1.6" height="1.6" fill="#0b0b0b"/></svg>',
+  info: '<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="7" fill="var(--s1)"/><rect x="7.2" y="7" width="1.6" height="5" fill="#fff"/><rect x="7.2" y="4" width="1.6" height="1.6" fill="#fff"/></svg>',
+  up: '<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="7" fill="var(--st-good)"/><path d="M4.5 8.5l2.5 2.5 4.5-5" stroke="#fff" stroke-width="1.8" fill="none"/></svg>',
+  flag: '<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><rect x="3" y="2" width="1.6" height="12" fill="var(--ink2)"/><path d="M4.6 2.5h8l-2 3 2 3h-8z" fill="var(--s1)"/></svg>'
+};
+function renderOverview() {
+  $('#heroFig').textContent = money(last52);
+  const d = last52 / prior52 - 1;
+  $('#heroDelta').replaceChildren(H('span', {class: 'delta' + (d < 0 ? ' neg' : '')}, [(d >= 0 ? '▲ ' : '▼ ') + pct(d, 1) + ' vs the prior 52 weeks']));
+  const sp = $('#heroSpark'); sp.replaceChildren(); sparkline(sp, chainByPeriod, 'var(--s1)');
+  const k = $('#kpis'); k.replaceChildren();
+  [
+    ['Market capture', (pooled * 100).toFixed(1) + '%', 'of local coffee spend, pooled; stores range 16% to 26%'],
+    ['Availability complaints', complaintsTotal + ' of 120', 'own-store reviews; 25 are at three stores'],
+    ['Items short or out', '3 of 150', 'store-SKU pairs below reorder point'],
+    ['Last-week inflow vs sales', pct(inflowVsSales), int(FLOW.inn[7]) + ' units in, ' + int(FLOW.sold[7]) + ' sold (week of Oct 19)']
+  ].forEach(t => k.appendChild(H('div', {class: 'tile'}, [H('div', {class: 'lbl', text: t[0]}), H('div', {class: 'val', text: t[1]}), H('div', {class: 'note', text: t[2]})])));
+  const f = $('#finds'); f.replaceChildren();
+  const top2 = growth.slice(0, 2), big = capRows.slice().sort((a, b) => b.mkt - a.mkt)[0], smallest = capRows.slice().sort((a, b) => a.mkt - b.mkt)[0], hiCap = capRows[0];
+  [
+    {b: 'Critical', i: 'crit', t: 'Three shortages share one cause: deliveries stopped',
+     p: 'Matcha latte (North Beach), oat milk lavender latte (Mission District) and Geisha beans (SoMa) got a big catch-up delivery on Oct 6 to 8, then nothing. 147 of 150 store-SKU pairs kept receiving stock. These three stores hold 25 of the 32 availability complaints.', a: '#inventory', l: 'See week-by-week deliveries'},
+    {b: 'Warning', i: 'warn', t: 'Chain-wide inflow fell ' + Math.abs(inflowDrop * 100).toFixed(0) + '% in one week',
+     p: 'In the week of Oct 19, ' + int(FLOW.inn[7]) + ' units came in against ' + int(FLOW.sold[7]) + ' sold, ' + Math.abs(inflowVsSales * 100).toFixed(0) + '% short. Inflow had matched sales every earlier week. Stock is being drawn down, and the next shortages will not show yet.', a: '#inventory', l: 'See the delivery gap'},
+    {b: 'Insight', i: 'info', t: capRows[capRows.length - 1].store.name + ' sits in the biggest market but captures the least',
+     p: big.store.name + "'s ZIP has " + money(big.mkt) + ' of coffee spend a year, the most of any store ZIP, yet Charlie\'s captures ' + (big.cap * 100).toFixed(0) + '%. ' + hiCap.store.name + ' captures ' + (hiCap.cap * 100).toFixed(0) + '% of a ' + money(hiCap.mkt) + ' market. That gap is headroom, or a signal about the location.', a: '#market', l: 'See capture by store'},
+    {b: 'Growth', i: 'up', t: top2[0].s.name + ' (' + pct(top2[0].g) + ') and ' + top2[1].s.name + ' (' + pct(top2[1].g) + ') grow fastest',
+     p: 'Revenue per 4-week period, Nov 2024 to Oct 2026. The other stores grew ' + pct(growth[5].g) + ' to ' + pct(growth[2].g) + '. Mission District is also the highest-revenue store and has an active shortage.', a: '#sales', l: 'See sales by store'},
+    {b: 'Decision', i: 'flag', t: 'SITE-001 is the lower-risk seventh store',
+     p: 'SITE-006 (Haight) leads SITE-001 by about $41K net after rent, but loses the lead if it loses roughly 4% of revenue, and the city approved 18 months of construction outside it. SITE-001 commits about $354K over 3 years, SITE-006 about $1.13M over 10.', a: '#sites', l: 'Test the scenarios'}
+  ].forEach(x => {
+    const c = H('div', {class: 'find'});
+    const badge = H('div', {class: 'badge'}); badge.innerHTML = ICON[x.i]; badge.appendChild(H('span', {text: x.b}));
+    c.appendChild(badge); c.appendChild(H('h3', {text: x.t})); c.appendChild(H('p', {text: x.p}));
+    c.appendChild(H('a', {class: 'jump', href: x.a, text: x.l + ' →'})); f.appendChild(c);
+  });
+}
+
+/* ---------- sales ---------- */
+const sstate = {weeks: 52, store: 'all'};
+function salesSlice() {
+  const nb = sstate.weeks / 4, from = SALES.length - nb, idx = sstate.store === 'all' ? STORES.map((s, i) => i) : [STORES.findIndex(s => s.id === sstate.store)];
+  return {nb, from, idx, rows: SALES.slice(from)};
+}
+function renderSalesTiles() {
+  const {nb, from, idx} = salesSlice();
+  const cur = sum(SALES.slice(from).map(r => sum(idx.map(i => r[i + 1]))));
+  const prev = from - nb >= 0 ? sum(SALES.slice(from - nb, from).map(r => sum(idx.map(i => r[i + 1])))) : null;
+  const chain = sum(SALES.slice(from).map(r => sum(r.slice(1))));
+  const first = sum(idx.map(i => SALES[from][i + 1])), lastv = sum(idx.map(i => SALES[25][i + 1]));
+  const label = sstate.store === 'all' ? 'All stores' : STORES.find(s => s.id === sstate.store).name;
+  const t = $('#salesTiles'); t.replaceChildren();
+  const mk = (l, v, n) => t.appendChild(H('div', {class: 'tile'}, [H('div', {class: 'lbl', text: l}), H('div', {class: 'val', text: v}), H('div', {class: 'note', text: n})]));
+  mk('Net revenue, ' + sstate.weeks + ' weeks', money(cur), label);
+  mk('vs previous ' + sstate.weeks + ' weeks', prev == null ? 'n/a' : pct(cur / prev - 1, 1), prev == null ? 'no earlier period in the data' : money(prev) + ' before');
+  mk('Per 4-week period', money(cur / nb), 'average in the selected period');
+  mk('Share of chain revenue', (cur / chain * 100).toFixed(0) + '%', 'latest 4 weeks vs first in view: ' + pct(lastv / first - 1, 1));
+}
+const drawSales = card($('#cardSales'), {
+  chart(chart) {
+    const {from, idx, rows} = salesSlice();
+    const ser = idx.map(i => ({id: STORES[i].id, name: STORES[i].name, color: STORES[i].c, values: rows.map(r => r[i + 1])}));
+    const n = rows.length, step = n > 20 ? 5 : n > 10 ? 3 : 1, ticks = [];
+    for (let i = 0; i < n; i += step) ticks.push(i);
+    const ctl = {};
+    legend(chart, ser.map(s => ({id: s.id, name: s.name, color: s.color})), id => ctl.h && ctl.h.highlight(id));
+    const root = plotDiv(chart);
+    ctl.h = lineChart(root, {
+      xLabels: rows.map(r => r[0]), xTicks: ticks, xTickLabels: rows.map(r => dShort(r[0])),
+      xTip: rows.map(r => '4 weeks from ' + dFmt(r[0])), series: ser, fmtAxis: v => '$' + Math.round(v / 1000) + 'K', fmtTip: money,
+      endLabels: ser.length === 1, height: 300, aria: 'Line chart of net revenue per 4-week period by store. A table view is available.'
+    });
+  },
+  table() {
+    const {rows, idx} = salesSlice();
+    return {caption: 'Net revenue per 4-week period (USD)', headers: ['Period from'].concat(idx.map(i => STORES[i].name)), rows: rows.map(r => [dFmt(r[0])].concat(idx.map(i => moneyFull(r[i + 1])))), num: true};
+  }
+});
+const drawRank = card($('#cardRank'), {
+  chart(chart) {
+    const {from} = salesSlice();
+    const rows = STORES.map((s, i) => ({label: s.name, sub: s.zip, value: sum(SALES.slice(from).map(r => r[i + 1])), color: sstate.store === 'all' || sstate.store === s.id ? s.c : 'var(--gray)', id: s.id}));
+    rows.sort((a, b) => b.value - a.value); rows.forEach(r => r.valueLabel = money(r.value));
+    hbar(plotDiv(chart), {rows, valName: 'Net revenue', aria: 'Bar chart of net revenue by store for the selected period. A table view is available.'});
+  },
+  table() {
+    const {from} = salesSlice();
+    return {caption: 'Net revenue by store, selected period (USD)', headers: ['Store', 'ZIP', 'Net revenue'], rows: STORES.map((s, i) => [s.name, s.zip, moneyFull(sum(SALES.slice(from).map(r => r[i + 1])))]).sort((a, b) => Number(b[2].replace(/\D/g, '')) - Number(a[2].replace(/\D/g, ''))), num: true};
+  }
+});
+function updateSales() {
+  $('#salesTitle').textContent = 'Net revenue per 4-week period' + (sstate.store === 'all' ? '' : ': ' + STORES.find(s => s.id === sstate.store).name);
+  renderSalesTiles(); drawSales(); drawRank();
+}
+function initSalesFilters() {
+  const pc = $('#periodChips');
+  [[12, 'Last 12 weeks'], [24, 'Last 24 weeks'], [52, 'Last 52 weeks'], [104, 'All 104 weeks']].forEach(([w, lb]) => {
+    const b = H('button', {class: 'chip', type: 'button', 'aria-pressed': String(w === sstate.weeks)});
+    b.innerHTML = '<svg class="ck" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 8.5l3 3 6-7" stroke="currentColor" stroke-width="2.2" fill="none"/></svg>';
+    b.appendChild(H('span', {text: lb}));
+    b.addEventListener('click', () => { sstate.weeks = w; pc.querySelectorAll('.chip').forEach(x => x.setAttribute('aria-pressed', x === b)); updateSales(); });
+    pc.appendChild(b);
+  });
+  const sel = $('#storeSel'); sel.appendChild(H('option', {value: 'all', text: 'All stores'}));
+  STORES.forEach(s => sel.appendChild(H('option', {value: s.id, text: s.name})));
+  sel.addEventListener('change', () => { sstate.store = sel.value; updateSales(); });
+}
+
+/* ---------- market ---------- */
+card($('#cardCap'), {
+  chart(chart) {
+    const rows = capRows.map(c => ({label: c.store.name, sub: 'ZIP ' + c.store.zip, value: c.cap, valueLabel: (c.cap * 100).toFixed(1) + '%', color: c.store.c,
+      tip: [{name: 'Store revenue', value: money(c.rev)}, {name: 'Market spend', value: money(c.mkt)}]}));
+    hbar(plotDiv(chart), {rows, max: 0.3, valName: 'Capture rate', tickFmt: v => Math.round(v * 100) + '%', aria: 'Bar chart of share of local coffee spend captured by each store. A table view is available.'});
+  },
+  table() { return {caption: 'Last 52 weeks (USD)', headers: ['Store', 'Store revenue', 'ZIP coffee spend', 'Capture rate'], rows: capRows.map(c => [c.store.name, moneyFull(c.rev), moneyFull(c.mkt), (c.cap * 100).toFixed(1) + '%']), num: true}; }
+});
+$('#capNote').textContent = 'Pooled capture is ' + (pooled * 100).toFixed(2) + '%. The revenue estimates for new sites below use this rate, with 16% and 26% as the extremes.';
+const demRows = DEM.map(d => ({label: d.name, sub: d.sites, zip: d.zip, a: d.a, b: d.f})).sort((x, y) => y.b / y.a - x.b / x.a);
+card($('#cardDem'), {
+  chart(chart) {
+    legend(chart, [{name: 'Last 26 weeks (actual)', color: 'var(--gray)', shape: 'dt'}, {name: 'Next 26 weeks (forecast)', color: 'var(--s1)', shape: 'dt'}]);
+    dumbbell(plotDiv(chart), {rows: demRows, aria: 'Dumbbell chart of coffee spend in candidate ZIPs, last 26 weeks to forecast next 26 weeks. A table view is available.'});
+  },
+  table() { return {caption: 'Whole-market coffee spend per 26 weeks (USD)', headers: ['Neighborhood', 'ZIP', 'Candidate sites', 'Last 26 weeks', 'Next 26 weeks', 'Change'], rows: demRows.map(r => [r.label, r.zip, r.sub, moneyFull(r.a), moneyFull(r.b), pct(r.b / r.a - 1, 1)]), num: true}; }
+});
+
+/* ---------- inventory ---------- */
+card($('#cardFlow'), {
+  chart(chart) {
+    const ser = [{id: 'inn', name: 'Units delivered', color: 'var(--s1)', values: FLOW.inn}, {id: 'sold', name: 'Units sold', color: 'var(--s2)', values: FLOW.sold}];
+    legend(chart, ser.map(s => ({id: s.id, name: s.name, color: s.color})));
+    lineChart(plotDiv(chart), {
+      xLabels: FLOW.weeks, xTicks: FLOW.weeks.map((w, i) => i), xTickLabels: FLOW.weeks, xTip: FLOW.weeks.map(w => 'Week of ' + w), series: ser,
+      fmtAxis: v => (v / 1000) + 'K', fmtTip: int, yZero: true, endLabels: true, height: 290,
+      annotations: [{i: 7, si: 0, text: pct(inflowDrop) + ' week over week', dy: 40}],
+      aria: 'Line chart of units delivered and sold per week across all stores. A table view is available.'
+    });
+  },
+  table() { return {caption: 'Units per week, all stores', headers: ['Week of', 'Delivered', 'Sold', 'Delivered minus sold'], rows: FLOW.weeks.map((w, i) => [w, int(FLOW.inn[i]), int(FLOW.sold[i]), (FLOW.inn[i] - FLOW.sold[i] >= 0 ? '+' : '') + int(FLOW.inn[i] - FLOW.sold[i])]), num: true}; }
+});
+$('#flowNote').textContent = 'Deliveries tracked sales within about 1% every week until Oct 19, when inflow dropped to ' + int(FLOW.inn[7]) + ' units against ' + int(FLOW.sold[7]) + ' sold.';
+let item = ITEMS[0];
+const drawItem = card($('#cardItem'), {
+  chart(chart) {
+    legend(chart, [{name: 'Units sold', color: 'var(--s2)', shape: 'sw'}, {name: 'Units delivered', color: 'var(--s1)', shape: 'sw'}]);
+    groupedCols(plotDiv(chart), {xLabels: FLOW.weeks, series: [{name: 'Units sold', color: 'var(--s2)', values: item.sold}, {name: 'Units delivered', color: 'var(--s1)', values: item.del}], zeroLabel: 1,
+      aria: 'Grouped column chart of weekly units sold and delivered for ' + item.name + ' at ' + item.store + '. A table view is available.'});
+  },
+  table() { return {caption: item.name + ', ' + item.store, headers: ['Week of', 'Sold', 'Delivered'], rows: FLOW.weeks.map((w, i) => [w, int(item.sold[i]), int(item.del[i])]), num: true}; }
+});
+function renderItemTiles() {
+  const t = $('#itemTiles'); t.replaceChildren();
+  const ratio = Math.min(1, item.stock / item.reorder);
+  const stockTile = H('div', {class: 'tile'}, [H('div', {class: 'lbl', text: 'Stock / reorder'}), H('div', {class: 'val', text: item.stock + ' of ' + item.reorder})]);
+  const m = H('div', {class: 'meter'}); const f = H('span'); f.style.width = Math.max(ratio * 100, 2) + '%'; m.appendChild(f); stockTile.appendChild(m);
+  const st = H('div', {class: 'stat'}); st.innerHTML = ICON.crit; st.appendChild(H('span', {text: item.stock === 0 ? 'Out of stock' : 'Critical'})); stockTile.appendChild(st);
+  t.appendChild(stockTile);
+  [['Last delivery', item.lastDel, 'none since, 3 weeks'], ['Complaints', String(item.complaints), 'availability, AI-extracted'], ['Store', item.store, 'weekly sales ' + int(sum(item.sold.slice(-4)) / 4) + ' units']].forEach(x =>
+    t.appendChild(H('div', {class: 'tile'}, [H('div', {class: 'lbl', text: x[0]}), H('div', {class: 'val', text: x[1]}), H('div', {class: 'note', text: x[2]})])));
+}
+function initItems() {
+  const c = $('#itemChips');
+  ITEMS.forEach(it => {
+    const b = H('button', {class: 'chip', type: 'button', 'aria-pressed': String(it === item)});
+    b.innerHTML = '<svg class="ck" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 8.5l3 3 6-7" stroke="currentColor" stroke-width="2.2" fill="none"/></svg>';
+    b.appendChild(H('span', {text: it.name + ' (' + it.store + ')'}));
+    b.addEventListener('click', () => { item = it; c.querySelectorAll('.chip').forEach(x => x.setAttribute('aria-pressed', x === b)); renderItemTiles(); drawItem(); });
+    c.appendChild(b);
+  });
+  renderItemTiles();
+}
+function renderHealth() {
+  const root = $('#healthTable'); root.replaceChildren();
+  const tb = H('table', {class: 'dt'}), th = H('thead'), tr = H('tr');
+  ['Store', 'Zero stock', 'At or below reorder', 'No delivery since Oct 12', 'Availability complaints (of 20 reviews)'].forEach((h, i) => tr.appendChild(H('th', {class: i > 0 && i < 4 ? 'num' : '', scope: 'col', text: h})));
+  th.appendChild(tr); tb.appendChild(th);
+  const body = H('tbody'), maxc = Math.max(...HEALTH.map(h => h.comp));
+  HEALTH.forEach(h => {
+    const s = STORES.find(x => x.id === h.id), flag = h.zero || h.low || h.gap, row = H('tr', {class: flag ? 'rowflag' : ''});
+    const first = H('td'); first.appendChild(H('span', {text: s.name}));
+    if (flag) { const st = H('span', {class: 'stat', style: 'margin-left:10px'}); st.innerHTML = ICON.crit; st.appendChild(H('span', {text: 'Shortage'})); first.appendChild(st); }
+    row.appendChild(first);
+    [h.zero, h.low, h.gap].forEach(v => row.appendChild(H('td', {class: 'num', text: String(v)})));
+    const cell = H('td'); const bar = H('span', {class: 'minibar'}); bar.style.width = Math.round(h.comp / maxc * 120) + 'px'; bar.style.background = s.c; cell.appendChild(bar); cell.appendChild(H('span', {text: String(h.comp), style: 'font-weight:650'})); row.appendChild(cell);
+    body.appendChild(row);
+  });
+  tb.appendChild(body); root.appendChild(tb);
+}
+
+/* ---------- sites ---------- */
+const mstate = {c: 0.2075, loss: 0};
+const siteNet = s => s.fc * mstate.c * (s.id === 'SITE-006' ? 1 - mstate.loss / 100 : 1) - 6 * (s.base + s.bld);
+const siteRev = s => s.fc * mstate.c * (s.id === 'SITE-006' ? 1 - mstate.loss / 100 : 1);
+const siteColor = s => s.id === 'SITE-001' ? 'var(--s1)' : s.id === 'SITE-006' ? 'var(--s2)' : 'var(--gray)';
+function sortedSites() { return SITES.slice().sort((a, b) => siteNet(b) - siteNet(a)); }
+const drawSites = card($('#cardSites'), {
+  chart(chart) {
+    const rows = sortedSites().map((s, i) => ({label: s.id, sub: s.area, value: siteNet(s), valueLabel: money(siteNet(s), 3), color: siteColor(s),
+      tip: [{name: 'Estimated revenue', value: money(siteRev(s), 3)}, {name: 'Rent, 6 months', value: money(6 * (s.base + s.bld), 3)}, {name: 'Lease', value: s.lease + ' months, ' + s.type}, {name: 'Rank', value: '#' + (i + 1) + ' of 12'}]}));
+    hbar(plotDiv(chart), {rows, rowH: 38, labelW: 200, rightW: 76, valName: 'Net after rent', tickFmt: v => '$' + (v / 1e6).toFixed(1) + 'M', max: 1.3e6, aria: 'Bar chart of estimated net after rent for 12 candidate sites. A table view is available.'});
+  },
+  table() {
+    return {caption: 'Six-month estimate at the current slider settings (USD)', headers: ['Site', 'Area', 'Sq ft', 'Lease (months)', 'Lease type', 'Monthly base rent', 'Monthly building charge', 'Rent, 6 months', 'Estimated revenue', 'Net after rent'],
+      rows: sortedSites().map(s => [s.id, s.area, int(s.sqft), s.lease, s.type, moneyFull(s.base), s.read ? moneyFull(s.bld) : 'unknown', moneyFull(6 * (s.base + s.bld)), moneyFull(siteRev(s)), moneyFull(siteNet(s))]), num: true};
+  }
+});
+function updateSites() {
+  $('#capOut').textContent = (mstate.c * 100).toFixed(2) + '%';
+  $('#lossOut').textContent = mstate.loss.toFixed(1) + '%';
+  const s1 = SITES.find(s => s.id === 'SITE-001'), s6 = SITES.find(s => s.id === 'SITE-006');
+  const n1 = siteNet(s1), n6 = siteNet(s6), lead = n6 - n1, order = sortedSites().map(s => s.id);
+  const be = 1 - (n1 + 6 * (s6.base + s6.bld)) / (s6.fc * mstate.c);
+  const co = $('#siteCallout'); co.replaceChildren();
+  const lines = [
+    [lead >= 0 ? 'SITE-006 leads SITE-001 by ' : 'SITE-001 leads SITE-006 by ', money(Math.abs(lead), 0), '. SITE-001 ranks #' + (order.indexOf('SITE-001') + 1) + ' and SITE-006 ranks #' + (order.indexOf('SITE-006') + 1) + ' of 12.'],
+    [' SITE-006 trails SITE-001 once it loses more than ', (be * 100).toFixed(1) + '%', ' of its revenue at this capture rate.']
+  ];
+  const p = H('span'); p.appendChild(H('span', {text: lines[0][0]})); p.appendChild(H('strong', {text: lines[0][1]})); p.appendChild(H('span', {text: lines[0][2]}));
+  if (be > 0) { p.appendChild(H('span', {text: lines[1][0]})); p.appendChild(H('strong', {text: lines[1][1]})); p.appendChild(H('span', {text: lines[1][2]})); }
+  co.appendChild(p);
+  drawSites();
+}
+function initSites() {
+  const lg = $('#siteLegend');
+  [['SITE-001 (recommended)', 'var(--s1)'], ['SITE-006 (construction announced)', 'var(--s2)'], ['Other candidates', 'var(--gray)']].forEach(([n, c]) => {
+    const e = H('span', {class: 'it'}); const k = H('span', {class: 'sw'}); k.style.background = c; e.appendChild(k); e.appendChild(H('span', {text: n})); lg.appendChild(e);
+  });
+  const cr = $('#capRng'), lr = $('#lossRng');
+  cr.addEventListener('input', () => { mstate.c = +cr.value; updateSites(); });
+  lr.addEventListener('input', () => { mstate.loss = +lr.value; updateSites(); });
+  const pc = $('#presetChips');
+  [['Base case', 0.2075, 0], ['Half of the 25% drop hits revenue', 0.2075, 12.5], ['Full 25% drop', 0.2075, 25], ['Cautious capture (16%)', 0.16, 0]].forEach(([n, c, l]) => {
+    const b = H('button', {class: 'chip', type: 'button', text: n});
+    b.addEventListener('click', () => { mstate.c = c; mstate.loss = l; cr.value = c; lr.value = l; updateSites(); });
+    pc.appendChild(b);
+  });
+}
+
+/* ---------- theme ---------- */
+(function theme() {
+  const btn = $('#themeBtn'), modes = ['auto', 'light', 'dark']; let i = 0;
+  btn.addEventListener('click', () => {
+    i = (i + 1) % 3; const m = modes[i];
+    if (m === 'auto') document.documentElement.removeAttribute('data-theme'); else document.documentElement.setAttribute('data-theme', m);
+    btn.textContent = 'Theme: ' + m;
+  });
+})();
+
+/* ---------- boot ---------- */
+renderOverview(); initSalesFilters(); renderSalesTiles(); initItems(); renderHealth(); initSites();
+updateSales(); updateSites(); draws.forEach(d => d());
+let rz; addEventListener('resize', () => { cancelAnimationFrame(rz); rz = requestAnimationFrame(() => { renderOverview(); draws.forEach(d => d()); }); });
+</script>
+</body>
+</html>
